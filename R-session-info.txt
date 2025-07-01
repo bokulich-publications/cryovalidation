@@ -1,0 +1,49 @@
+Session Info:
+ version  R version 4.4.2 (2024-10-31)
+ os       macOS Sonoma 14.7.2
+ system   x86_64, darwin20
+ ui       RStudio
+ language (EN)
+ collate  en_US.UTF-8
+ ctype    en_US.UTF-8
+ tz       Europe/Zurich
+ date     2025-04-03
+ rstudio  2024.12.1+563 Kousa Dogwood (desktop)
+ pandoc   3.2 @ /Applications/RStudio.app/Contents/Resources/app/quarto/bin/tools/x86_64/ (via rmarkdown)
+ quarto   1.5.57 @ /Applications/RStudio.app/Contents/Resources/app/quarto/bin/quarto
+
+Loaded Packages:
+- sessioninfo : 1.2.3 
+- ggVennDiagram : 1.5.2 
+- openxlsx : 4.2.8 
+- ComplexUpset : 1.3.3 
+- UpSetR : 1.4.0 
+- colorspace : 2.1-1 
+- gridExtra : 2.3 
+- wesanderson : 0.3.7 
+- microbiome : 1.26.0 
+- qiime2R : 0.99.6 
+- phyloseq : 1.48.0 
+- RColorBrewer : 1.1-3 
+- viridis : 0.6.5 
+- viridisLite : 0.4.2 
+- ggridges : 0.5.6 
+- ggExtra : 0.10.1 
+- sf : 1.0-19 
+- pheatmap : 1.0.12 
+- ggpubr : 0.6.0 
+- microeco : 1.13.0 
+- lubridate : 1.9.4 
+- forcats : 1.0.0 
+- stringr : 1.5.1 
+- purrr : 1.0.4 
+- readr : 2.1.5 
+- tibble : 3.2.1 
+- ggplot2 : 3.5.1 
+- tidyverse : 2.0.0 
+- tidyr : 1.3.1 
+- dplyr : 1.1.4 
+- BiocManager : 1.30.25 
+- devtools : 2.4.5 
+- usethis : 3.1.0 
+- rmarkdown : 2.29 

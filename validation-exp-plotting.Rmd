@@ -1,0 +1,1199 @@
+---
+author: "Anton Lavrinienko"
+title: "Validation experiment data plotting"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("~/Documents/R-wrkdir/mv-wp2-r-202412")
+```
+
+## Plotting Notebook
+
+This notebook contains code that was used to process and plot the data from the validation experiment
+
+#### Required Packages
+
+The following packages are required for the analysis. If not installed, they will be installed automatically
+
+```{r packages, results='hide', message=FALSE, warning=FALSE}
+
+#List of packages
+packages <- c("rmarkdown", "devtools", "BiocManager", "dplyr", "tidyr", "tidyverse", "microeco", "ggplot2", "ggpubr", "pheatmap", "sf", "ComplexUpset", "UpSetR", "readr", "openxlsx", "ggExtra", "gridExtra", "ggridges", "stringr", "viridis", "RColorBrewer", "wesanderson", "sessioninfo")
+
+#Install missing packages
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(!installed_packages)) {install.packages(packages[!installed_packages])}
+
+#Load libraries
+lapply(packages, library, character.only = TRUE)
+
+#Install additional relevant packages
+
+#https://www.bioconductor.org/packages/release/bioc/html/phyloseq.html
+BiocManager::install("phyloseq")
+library("phyloseq")
+
+#https://github.com/jbisanz/qiime2R
+if (!requireNamespace("devtools", quietly = TRUE)){install.packages("devtools")}
+devtools::install_github("jbisanz/qiime2R")
+library("qiime2R")
+
+#https://microbiome.github.io/tutorials/Installation.html
+BiocManager::install("microbiome")
+library("microbiome")
+
+```
+
+#### Import alpha diversity data
+
+#### Observed features data
+
+```{r}
+
+#Unzip the observed-features-group-significance.qzv file into the temp directory to keep things clean
+temp_dir_observed_ags <- tempfile()
+dir.create(temp_dir_observed_ags)
+
+#Check the path, unzip, and check contents
+#print(temp_dir_observed_ags)
+unzip("adiv/observed-features-group-significance.qzv", exdir = temp_dir_observed_ags)
+#list.files(temp_dir_observed_ags, recursive = TRUE)
+
+#Grab folder name
+uuid_folder <- list.files(temp_dir_observed_ags)[1]
+
+#Build and check the path
+observed_ags_path <- file.path(temp_dir_observed_ags, uuid_folder, "data", "metadata.tsv")
+#print(observed_ags_path)
+
+#Read the data
+observed_ags_df <- read.delim(observed_ags_path)
+
+#Drop the first row containing q2:types info
+observed_ags_df <- observed_ags_df[-1, ]
+
+#Check the data
+#head(observed_ags_df) #OK
+#View(observed_ags_df)
+
+###Cleanup temp directory
+#unlink(temp_dir_observed_ags, recursive = TRUE)
+###Confirm that things were cleaned-up
+#list.files(temp_dir_observed_ags, recursive = TRUE)
+
+```
+
+#### Faith PD data
+
+```{r}
+
+#Unzip the faith-pd-group-significance.qzv file into the temp directory to keep things clean
+temp_dir_faithPD_ags <- tempfile()
+dir.create(temp_dir_faithPD_ags)
+
+#Check the path, unzip, and check contents
+#print(temp_dir_faithPD_ags)
+unzip("adiv/faith-pd-group-significance.qzv", exdir = temp_dir_faithPD_ags)
+#list.files(temp_dir_faithPD_ags, recursive = TRUE)
+
+#Grab folder name
+uuid_folder <- list.files(temp_dir_faithPD_ags)[1]
+
+#Build and check the path
+faithPD_ags_path <- file.path(temp_dir_faithPD_ags, uuid_folder, "data", "metadata.tsv")
+#print(faithPD_ags_path)
+
+#Read the data
+faithPD_ags_df <- read.delim(faithPD_ags_path)
+
+#Drop the first row containing q2:types info
+faithPD_ags_df <- faithPD_ags_df[-1, ]
+
+#Check the data
+#head(faithPD_ags_df) #OK
+#View(faithPD_ags_df)
+
+###Cleanup temp directory
+#unlink(temp_dir_faithPD_ags, recursive = TRUE)
+###Confirm that things were cleaned-up
+#list.files(temp_dir_faithPD_ags, recursive = TRUE)
+
+```
+
+#### Shannon entropy data
+
+```{r}
+
+#Unzip the shannon-group-significance.qzv file into the temp directory to keep things clean
+temp_dir_shannon_ags <- tempfile()
+dir.create(temp_dir_shannon_ags)
+
+#Check the path, unzip, and check contents
+#print(temp_dir_shannon_ags)
+unzip("adiv/shannon-group-significance.qzv", exdir = temp_dir_shannon_ags)
+#list.files(temp_dir_shannon_ags, recursive = TRUE)
+
+#Grab folder name
+uuid_folder <- list.files(temp_dir_shannon_ags)[1]
+
+#Build and check the path
+shannon_ags_path <- file.path(temp_dir_shannon_ags, uuid_folder, "data", "metadata.tsv")
+#print(shannon_ags_path)
+
+#Read the data
+shannon_ags_df <- read.delim(shannon_ags_path)
+
+#Drop the first row containing q2:types info
+shannon_ags_df <- shannon_ags_df[-1, ]
+
+#Check the data
+#head(shannon_ags_df) #OK
+#View(shannon_ags_df)
+
+###Cleanup temp directory
+#unlink(temp_dir_shannon_ags, recursive = TRUE)
+###Confirm that things were cleaned-up
+#list.files(temp_dir_shannon_ags, recursive = TRUE)
+
+```
+
+#### Figure 2
+
+#### Figure 2A - Observed ASVs across cryopreservation treatments
+
+```{r}
+#Figure 2A
+
+#Convert to factor (if not already)
+observed_ags_df$`Preservation` <- factor(observed_ags_df$`Preservation`,
+levels = c("Fresh", "Direct-Plating", "DMSO-Trehalose-TSB", "Glycerol", "Glycerol-Cysteine-Palladium", "Glycerol-DSMO-PEG", "Glycerol-PalladiumBeads", "PalladiumBeads", "Snap-freezing", "Sucrose"))
+
+#Fix a typo in the cryopreservation treatment level name before plotting
+levels(observed_ags_df$`Preservation`)[levels(observed_ags_df$`Preservation`) == "Glycerol-DSMO-PEG"] <- "Glycerol-DMSO-PEG"
+#levels(observed_ags_df$`Preservation`)
+
+#Reorder so that samples sequenced and plated fresh are displayed first
+observed_ags_df$`Preservation` <- factor(observed_ags_df$`Preservation`,
+levels = c("Fresh", "Direct-Plating", "DMSO-Trehalose-TSB", "Glycerol", "Glycerol-Cysteine-Palladium", "Glycerol-DMSO-PEG", "Glycerol-PalladiumBeads", "PalladiumBeads", "Snap-freezing", "Sucrose"))
+
+#Convert to factor (if not already)
+observed_ags_df$SampleDelivery <- factor(observed_ags_df$SampleDelivery)
+
+#Convert to numeric (if not already)
+observed_ags_df$`observed_features` <- as.numeric(observed_ags_df$`observed_features`)
+
+#Assign colors
+extended_palette <- colorRampPalette(wes_palette("AsteroidCity3"))
+my_colors <- extended_palette(length(levels(observed_ags_df$`Preservation`)))
+
+#Plot observed ASVs across sample cryopreservation treatments
+p_obsASVs_cryo <- ggboxplot(observed_ags_df,
+          x = "Preservation",
+          y = "observed_features",
+          fill = "Preservation",
+          palette = my_colors,
+          add = "jitter",
+          add.params = list(alpha = 0.5, size = 1.5, shape = "SampleDelivery"),
+          outlier.shape = NA) + scale_shape_manual(values = c(1, 16)) +
+  geom_vline(xintercept = 1.5, linetype = "dashed", color = "gray30", size = 0.5) +  # Add dashed line to separate cryopreserved samples
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none", legend.title = element_blank()) + labs(x = NULL, y = "Observed ASVs")
+
+print(p_obsASVs_cryo) #OK
+
+```
+
+#### Figure 2B - Observed ASVs across cryopreserved samples stored under different storage conditions
+
+```{r}
+#Figure 2B
+
+#Convert to factor (if not already)
+observed_ags_df$Storage <- factor(observed_ags_df$Storage)
+
+#Remove rows where Storage is "Direct-Plating" or "Fresh" to plot only cryopreserved samples in Figure 2B
+observed_ags_storage_df <- observed_ags_df %>%
+filter(!Storage %in% c("Direct-Plating", "Fresh"))
+
+#Fix names for the remaining levels prior to plotting
+observed_ags_storage_df <- observed_ags_storage_df %>%
+mutate(Storage = fct_recode(Storage, "-80°C" = "80C", "Liquid nitrogen" = "liquid-nitrogen"))
+
+#Check the data
+#View(observed_ags_storage_df) #OK
+
+#Plot observed ASVs by sample storage group
+p_obsASVs_storage <- ggboxplot(observed_ags_storage_df,
+          x = "Storage",
+          y = "observed_features",
+          fill = "lightgray",
+          add = "jitter",
+          add.params = list(alpha = 0.4, size = 1.5, shape = "SampleDelivery"),
+          outlier.shape = NA) + scale_shape_manual(values = c(1, 16)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(), legend.position = "none", legend.title = element_blank()) + labs(x = NULL, y = "Observed ASVs")
+
+print(p_obsASVs_storage) #OK
+
+```
+
+#### Import Random Forest sample classifier data
+
+#### Cryopreservation-based model accuracy data
+
+```{r}
+
+#Unzip the Preservation-confusion-matrix-RFncv.qzv file into the temp directory to keep things clean
+temp_dir_preservation_rf <- tempfile()
+dir.create(temp_dir_preservation_rf)
+
+#Check the path, unzip, and check contents
+#print(temp_dir_preservation_rf)
+unzip("rf/Preservation-confusion-matrix-RFncv.qzv", exdir = temp_dir_preservation_rf)
+#list.files(temp_dir_preservation_rf, recursive = TRUE)
+
+#Grab folder name
+uuid_folder <- list.files(temp_dir_preservation_rf)[1]
+
+#Build and check the path
+preservation_rf_path <- file.path(temp_dir_preservation_rf, uuid_folder, "data", "predictive_accuracy.tsv")
+#print(preservation_rf_path)
+
+#Read the data
+preservation_rf_df <- read.delim(preservation_rf_path)
+
+#Drop the last 3 rows containing the following info (Overall Accuracy, Baseline Accuracy, Accuracy Ratio), and also the last column (Overall Accuracy)
+preservation_rf_df <- preservation_rf_df[1:(nrow(preservation_rf_df) - 3),  # Drop last 3 rows
+                                         1:(ncol(preservation_rf_df) - 1)]  # Drop last column
+
+#Check the data
+#head(preservation_rf_df) #OK
+#View(preservation_rf_df)
+
+###Cleanup temp directory
+#unlink(temp_dir_preservation_rf, recursive = TRUE)
+###Confirm that things were cleaned-up
+#list.files(temp_dir_preservation_rf, recursive = TRUE)
+
+```
+
+#### Figure 2C - confusion matrix data
+
+```{r}
+#Figure 2C
+
+#Define the order for True and Predicted labels
+label_order <- c("Direct-Plating", "DMSO-Trehalose-TSB", "Glycerol", "Glycerol-Cysteine-Palladium", 
+                 "Glycerol-DMSO-PEG", "Glycerol-PalladiumBeads", "PalladiumBeads", "Snap-freezing", "Sucrose")
+
+#Fix the typo in the first column and column headers prior to plotting
+preservation_rf_df <- preservation_rf_df %>%
+rename_with(~ gsub("\\.", "-", .)) %>%  # Change from "." to "-"
+rename_with(~ gsub("Glycerol-DSMO-PEG", "Glycerol-DMSO-PEG", .))  # Fix typo in headers
+preservation_rf_df[[1]] <- gsub("Glycerol-DSMO-PEG", "Glycerol-DMSO-PEG", preservation_rf_df[[1]]) # Fix typo in first column
+
+#Convert to long format
+heatmap_preservation_df <- preservation_rf_df %>%
+pivot_longer(cols = -1, names_to = "Predicted", values_to = "Value") %>%
+rename(True = 1)  # Rename the first column to True
+
+#Convert True and Predicted labels into factors with defined order (as above)
+heatmap_preservation_df <- heatmap_preservation_df %>%
+mutate(True = factor(True, levels = label_order), Predicted = factor(Predicted, levels = label_order))
+
+#Plot the heatmap for the cryopreservation-based model accuracy data
+  p_cryo_rf <- ggplot(heatmap_preservation_df, aes(x = Predicted, y = True, fill = Value)) +
+  geom_tile(color = "white") +  # White borders between tiles
+  scale_fill_gradient(low = "whitesmoke", high = "midnightblue", limits = c(0, 0.8)) +  # Color gradient
+  scale_y_discrete(limits = rev(label_order)) +  # Reverse y-axis order to match x-axis
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), panel.grid = element_blank()) +
+  labs(x = "Predicted label", y = "True label", fill = "Proportion")
+
+print(p_cryo_rf) #OK
+
+```
+
+#### Figure 2D - AUC data
+
+```{r}
+#Figure 2D
+
+#Define AUC values for the cryopreservation-based model - keep naming and order consistent with other panels in Figure 2
+auc_cryo_data <- data.frame(Cryopreservation = c("Direct-Plating", "DMSO-Trehalose-TSB", "Glycerol", 
+                       "Glycerol-Cysteine-Palladium", "Glycerol-DMSO-PEG", 
+                       "Glycerol-PalladiumBeads", "PalladiumBeads", "Snap-freezing", "Sucrose"),
+AUC_cryo = c(1.00, 0.51, 0.46, 0.43, 0.46, 0.49, 0.70, 0.69, 0.48))
+
+#Fix y-axis order
+auc_cryo_data$Cryopreservation <- factor(auc_cryo_data$Cryopreservation, levels = rev(auc_cryo_data$Cryopreservation))
+
+#Extend the AsteroidCity3 palette to 10 colors and remove the first one and then reverse the order to align with the Figure 2A panel
+extended_palette <- colorRampPalette(wes_palette("AsteroidCity3"))(10)[-1]  # Generate 10 colors, remove first
+colors <- rev(extended_palette)
+
+#Plot AUC values for the cryopreservation-based model
+  p_cryo_AUC_rf <- ggplot(auc_cryo_data, aes(x = AUC_cryo, y = Cryopreservation, fill = Cryopreservation)) +
+  geom_col(width = 0.7) +
+  geom_vline(xintercept = 0.5, linetype = "dashed", color = "grey30", linewidth = 0.5) +  # Add threshold at 0.5 to highlight better than random groups
+  scale_x_continuous(limits = c(0, 1)) +
+  scale_fill_manual(values = colors) +
+  theme_minimal() + theme(legend.position = "none", axis.text.y = element_text(margin = margin(r = 0))) + labs(x = "AUC", y = NULL)
+
+plot(p_cryo_AUC_rf) #OK
+
+```
+
+#### Merge Figure 2
+
+```{r}
+#Merge Figure 2 A-D panels
+
+#Arrange panels A and B on a first row
+merged_cryopreservation_row1 <- ggarrange(p_obsASVs_cryo, p_obsASVs_storage, labels = c("A", "B"), 
+                   ncol = 2, widths = c(5, 2))
+
+#Arrange panels C and D on a second row
+merged_cryopreservation_row2 <- ggarrange(p_cryo_rf, p_cryo_AUC_rf, labels = c("C", "D"), 
+                   ncol = 2, widths = c(6, 4))
+
+#Combine rows and adjust heights
+merged_cryopreservation <- ggarrange(merged_cryopreservation_row1, merged_cryopreservation_row2, nrow = 2, heights = c(1, 1.25))  
+
+#Print final figure
+print(merged_cryopreservation) #OK
+
+#Save as a PDF
+#ggsave("plots/Figure2.pdf", plot=merged_cryopreservation, width=9, height=7) #OK
+
+```
+
+#### Figure 3
+
+#### Create upset plots for an overview of the overlap in presence-absence of bacterial genera among cryopreservation treatments, fresh, and directly plated samples
+
+```{r}
+#Figure 3
+
+#Import the data with counts per sample per taxon sourced from the rarefied-silva-taxa-bar-plots.qzv
+data <- read_csv("composition/level-6.csv", show_col_types = FALSE)
+#View(data)  #OK
+
+#Fix the typo in the Preservation column
+data$Preservation <- gsub("Glycerol-DSMO-PEG", "Glycerol-DMSO-PEG", data$Preservation)
+
+#Define the order of treatments
+preservation_order <- c("Fresh", "Direct-Plating", "DMSO-Trehalose-TSB", "Glycerol", 
+                        "Glycerol-Cysteine-Palladium", "Glycerol-DMSO-PEG", 
+                        "Glycerol-PalladiumBeads", "PalladiumBeads", 
+                        "Snap-freezing", "Sucrose")
+
+#Reverse the order to prepare for plotting
+preservation_order_reversed <- rev(preservation_order)
+
+#Check that the Preservation column is a factor with the correct order
+data$Preservation <- factor(data$Preservation, levels = preservation_order)
+
+#Convert count data to presence-absence (1 if count > 0)
+taxa_columns <- grep("^d__", colnames(data), value = TRUE)
+data[taxa_columns] <- (data[taxa_columns] > 0) * 1
+
+#Arrange presence-absence data by Preservation
+grouped_data <- data %>%
+group_by(Preservation) %>%
+summarise(across(all_of(taxa_columns), ~ as.integer(any(. > 0))), .groups = "drop")
+
+#Transpose data and format for UpSet plot
+upset_data <- as.data.frame(t(grouped_data[,-1]))
+colnames(upset_data) <- grouped_data$Preservation
+upset_data$Taxa <- rownames(upset_data)
+rownames(upset_data) <- NULL
+
+#Check the order of Preservation groups
+upset_data <- upset_data[, c("Taxa", preservation_order)]
+
+#Plot presence-absence data using an UpSet plot
+upset_plot <- upset(upset_data, preservation_order_reversed, sort_sets = FALSE,  # Use the correct Preservation order
+  name='Overlap between groups',
+  height_ratio = 1,
+  width_ratio = 0.2,  # Adjust width of set size bars
+  min_size = 2, # Only include intersections with at least 2 members
+  set_sizes=(upset_set_size() + ylab('Genus count')),
+  annotations = list() + 
+                theme_minimal() + 
+                theme(axis.text.y = element_text(size = 16)))  # Increase Preservation name size
+
+print(upset_plot) #OK
+
+#Save as a PDF
+#ggsave("plots/Figure3.pdf", plot=upset_plot, width=8, height=5) #OK # Fix and match final colors in PDF using Inkscape
+
+```
+
+#### Supplementary Table associated with the Figure 3
+
+#### Export the presence-absence data and merge with the relative abundance data
+
+```{r}
+#Export the presence-absence data for intersections with the highest number of members and merge with the total relative abundance data
+
+data <- read_csv("composition/level-6.csv", show_col_types = FALSE)
+
+#Fix the typo in the Preservation column
+data$Preservation <- gsub("Glycerol-DSMO-PEG", "Glycerol-DMSO-PEG", data$Preservation)
+
+#Define the order of Preservation groups
+preservation_order <- c("Fresh", "Direct-Plating", "DMSO-Trehalose-TSB", "Glycerol", 
+                        "Glycerol-Cysteine-Palladium", "Glycerol-DMSO-PEG", 
+                        "Glycerol-PalladiumBeads", "PalladiumBeads", 
+                        "Snap-freezing", "Sucrose")
+
+#Convert read counts to relative abundance data in %
+taxa_columns <- grep("^d__", colnames(data), value = TRUE)  # Identify taxa columns
+data[taxa_columns] <- data[taxa_columns] / rowSums(data[taxa_columns]) * 100  # Convert to %
+
+#Calculate the total relative abundance per taxa
+taxa_avg_abundance <- data %>%
+  summarise(across(all_of(taxa_columns), mean)) %>%
+  pivot_longer(cols = everything(), names_to = "Taxa", values_to = "Relative_Abundance")
+
+#Extract taxa present in all groups
+taxa_common_all <- upset_data %>%
+  filter(rowSums(select(., -Taxa)) == ncol(.) - 1) %>%
+  left_join(taxa_avg_abundance, by = "Taxa")  # Add avg. relative abundance
+
+#Extract taxa unique to Fresh
+taxa_unique_fresh <- upset_data %>%
+  filter(Fresh == 1 & rowSums(select(., -Taxa, -Fresh)) == 0) %>%
+  left_join(taxa_avg_abundance, by = "Taxa")
+
+#Extract taxa present in all groups except Fresh
+taxa_all_except_fresh <- upset_data %>%
+  filter(Fresh == 0 & rowSums(select(., -Taxa, -Fresh)) == ncol(.) - 2) %>%
+  left_join(taxa_avg_abundance, by = "Taxa")
+
+#Extract taxa present in all groups except Fresh and Direct-Plating
+taxa_all_except_fresh_dp <- upset_data %>%
+  filter(Fresh == 0 & `Direct-Plating` == 0 & rowSums(select(., -Taxa, -Fresh, -`Direct-Plating`)) == ncol(.) - 3) %>%
+  left_join(taxa_avg_abundance, by = "Taxa")
+
+#Export the results into an Excel file (Supplementary Table)
+wb <- createWorkbook()
+addWorksheet(wb, "All_overlap")
+addWorksheet(wb, "Unique_Fresh")
+addWorksheet(wb, "All_except_Fresh")
+addWorksheet(wb, "All_except_Fresh_DP")
+
+writeData(wb, "All_overlap", taxa_common_all)
+writeData(wb, "Unique_Fresh", taxa_unique_fresh)
+writeData(wb, "All_except_Fresh", taxa_all_except_fresh)
+writeData(wb, "All_except_Fresh_DP", taxa_all_except_fresh_dp)
+
+#saveWorkbook(wb, "composition/taxa_overlap_rel_abund.xlsx", overwrite = TRUE) #OK
+
+```
+
+#### Additional annotation figure for the Figure 3
+
+```{r}
+#Figure 3 - extra annotation for the Figure 3 to add info about the cumulative relative abundance of the members in the top intersection by counts
+
+#Define the data: 99.67% is to total relative abundance of taxa in the All_overlap group (see above)
+donut_data <- data.frame(category = c("Deep Red", "Grey"), value = c(99.67, 100 - 99.67))
+
+#Compute the y position for labels
+donut_data$ypos <- cumsum(donut_data$value) - donut_data$value / 2
+
+#Create the donut plot
+donut_plot <- ggplot(donut_data, aes(x = "", y = value, fill = category)) +
+  geom_bar(stat = "identity", width = 0.3, color = "white") + 
+  coord_polar(theta = "y", start = 0) +  # Convert to polar coordinates
+  scale_fill_manual(values = c("Deep Red" = "violetred4", "Grey" = "grey100")) + 
+  theme_void() +  # Remove background elements
+  theme(legend.position = "none") +  # Hide legend
+  annotate("text", x = 0, y = 0, label = "99.67%", , size = 6)
+
+print(donut_plot) #OK
+
+#Save as a PDF
+#ggsave("plots/Figure3-donut-extra.pdf", plot=donut_plot, width=2, height=2) #OK # Add to the final figure in PDF using Inkscape
+
+```
+
+#### Figure 4
+
+#### Import beta diversity data
+
+#### Figure 4A - unweighted UniFrac PCoA plot by SubjectID
+
+```{r}
+#Figure 4A
+
+#Import the unweighted UniFrac PCoA results
+unwUF_pcoa_results <- read_qza("bdiv/unweighted_unifrac_pcoa_results.qza")
+
+#Extract the PCoA dataframe
+unwUF_pcoa_df <- unwUF_pcoa_results$data$Vectors  #Extract sample coordinates
+
+#Import the final metadata
+metadata <- read.delim("metadata-extra202412.txt", stringsAsFactors = FALSE)
+
+#Merge metadata with the unweighted UniFrac PCoA results based on the SampleID
+unwUF_merged_data <- merge(unwUF_pcoa_df, metadata, by.x = "SampleID", by.y = "SampleID")
+
+#Pick colors with sufficient contrast for n=15 subjects
+subject_colors <- c("#1b9e77", "#F4A261", "#7570b3", "#e7298a", "#66a61e",
+                    "#e6ab02", "#a6761d", "#666666", "#17becf", "#bcbd22",
+                    "#8c564b", "#ff7f0e", "#2ca02c", "#6f42c1", "#1f77b4")
+
+#Make a PCoA plot based on the unweighted UniFrac PCoA data colored by SubjectID
+unwUF_pcoa_plot <- ggplot(unwUF_merged_data, aes(x = PC1, y = PC2, color = SubjectID)) +
+  geom_point(size = 3, alpha = 0.8) +  # Adjust point size and transparency
+  scale_color_manual(values = subject_colors) +  # Apply the color palette
+  labs(x = paste0("Axis 1 (", round(unwUF_pcoa_results$data$ProportionExplained[1] * 100, 2), "%)"),
+       y = paste0("Axis 2 (", round(unwUF_pcoa_results$data$ProportionExplained[2] * 100, 2), "%)")) +
+  theme_minimal() + theme(legend.position = "right")
+
+print(unwUF_pcoa_plot) #OK
+
+```
+
+#### Figure 4B - confusion matrix data
+
+#### Import Random Forest sample classifier data
+
+#### SubjectID-based model accuracy data
+
+```{r}
+
+#Unzip the SubjectID-confusion-matrix-RFncv.qzv file into the temp directory to keep things clean
+temp_dir_subject_rf <- tempfile()
+dir.create(temp_dir_subject_rf)
+
+#Check the path, unzip, and check contents
+#print(temp_dir_subject_rf)
+unzip("rf/SubjectID-confusion-matrix-RFncv.qzv", exdir = temp_dir_subject_rf)
+#list.files(temp_dir_subject_rf, recursive = TRUE)
+
+#Grab folder name
+uuid_folder <- list.files(temp_dir_subject_rf)[1]
+
+#Build and check the path
+subject_rf_path <- file.path(temp_dir_subject_rf, uuid_folder, "data", "predictive_accuracy.tsv")
+#print(subject_rf_path)
+
+#Read the data
+subject_rf_df <- read.delim(subject_rf_path)
+
+#Drop the last 3 rows containing the following info (Overall Accuracy, Baseline Accuracy, Accuracy Ratio), and also the last column (Overall Accuracy)
+subject_rf_df <- subject_rf_df[1:(nrow(subject_rf_df) - 3),  # Drop last 3 rows
+                                         1:(ncol(subject_rf_df) - 1)]  # Drop last column
+
+#Check the data
+#head(subject_rf_df) #OK
+#View(subject_rf_df)
+
+###Cleanup temp directory
+#unlink(temp_dir_subject_rf, recursive = TRUE)
+###Confirm that things were cleaned-up
+#list.files(temp_dir_subject_rf, recursive = TRUE)
+
+#Figure 4B
+
+#Define the order for True and Predicted labels
+label_order_subject <- c("P003", "P004", "P008", "P009", "P010", "P013", "P017", "P018", "P021", "P022", "P023", "P024", "P025", "P026", "P028")
+
+#Convert to long format
+heatmap_subject_rf_df <- subject_rf_df %>%
+pivot_longer(cols = -1, names_to = "Predicted", values_to = "Value") %>%
+rename(True = 1)  # Rename the first column to True
+
+#Convert True and Predicted labels into factors with defined order (as above)
+heatmap_subject_rf_df <- heatmap_subject_rf_df %>%
+mutate(True = factor(True, levels = label_order_subject), Predicted = factor(Predicted, levels = label_order_subject))
+
+#Plot the heatmap for the subject-based model accuracy data
+  p_subject_rf <- ggplot(heatmap_subject_rf_df, aes(x = Predicted, y = True, fill = Value)) +
+  geom_tile(color = "white") +  # White borders between tiles
+  scale_fill_gradient(low = "whitesmoke", high = "midnightblue", limits = c(0, 1.0)) +  # Color gradient
+  scale_y_discrete(limits = rev(label_order_subject)) +  # Reverse y-axis order to match x-axis
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), panel.grid = element_blank()) +
+  labs(x = "Predicted label", y = "True label", fill = "Proportion")
+
+print(p_subject_rf) #OK
+
+```
+
+#### Merge Figure 4
+
+```{r}
+#Merge Figure 4 A-B panels
+merged_subject_ord_rf <- ggarrange(unwUF_pcoa_plot, p_subject_rf, 
+                    common.legend = FALSE,
+                    labels = c("A", "B"),
+                    ncol = 2, nrow = 1, align="h"+ theme_void())
+
+merged_subject_ord_rf #OK
+
+#Save as a PDF
+#ggsave("plots/Figure4.pdf", plot=merged_subject_ord_rf, width=11, height=4.5) #OK
+
+```
+
+#### Figure 5
+
+#### Import ANCOM-BC differential abundance data
+
+#### Plot differentially abundant features across cryopreservation treatments by host age: (A) adults, (B) children, (C) infants
+
+#### Figure 5A
+
+```{r}
+#Figure 5A - DA test data for adults
+
+#Import DA test data for adults
+adultdata <- read.delim("da/ancombc-adults.txt")
+
+#Check the data
+#str(adultdata) #OK
+#View(adultdata)
+
+#Filter for significant genera based on the q-value ≤ 0.001
+significant_adultdata <- adultdata %>%
+filter(if_any(starts_with("qvalue"), ~ . <= 0.001))
+
+#Convert data to long format for ggplot
+df_long_adults <- significant_adultdata %>%
+  pivot_longer(cols = starts_with("lfc"), names_to = "Treatment", values_to = "LFC") %>%
+  pivot_longer(cols = starts_with("qvalue"), names_to = "Qvalue", values_to = "Qval") %>%
+  filter(Qvalue == gsub("lfc", "qvalue", Treatment)) %>%  # Match q-values to corresponding LFCs
+  select(-Qvalue) %>%  
+  mutate(
+    Taxonomy = sub(".*f__", "", Taxonomy),  # Trim Taxonomy to include only Family and Genus names
+    Treatment = gsub("^lfc", "", Treatment),  # Remove "lfc" prefix
+    Treatment = gsub("\\.", "-", Treatment),  # Replace "." with "-"
+    Treatment = gsub("Glycerol-DSMO-PEG", "Glycerol-DMSO-PEG", Treatment)  # Fix a typo
+  ) %>%
+  mutate(LFC = ifelse(Qval > 0.001, NA, LFC))  # Mask non-significant values
+
+#Order Taxonomy alphabetically from top to bottom
+df_long_adults$Taxonomy <- factor(df_long_adults$Taxonomy, levels = rev(sort(unique(df_long_adults$Taxonomy))))  
+
+#Create a BrBg-based color ramp
+heatmap_colors_BrBg <- colorRampPalette(c("#a6611a", "#dfc27d", "#80cdc1", "#018571"))(100)
+
+#Define color scale using the full palette
+heatmap_colors_adults <- scale_fill_gradientn(colors = heatmap_colors_BrBg, na.value = "grey90", name = "LFC", breaks = seq(-3, 3, by = 1))
+
+#Plot DA test data for adults
+da_adults <- ggplot(df_long_adults, aes(x = Treatment, y = Taxonomy, fill = LFC)) +
+  geom_tile(color = "white") +  # Add grid with white borders
+  heatmap_colors_adults +  # Use LFC color scale 
+  theme_minimal() + labs(x = NULL, y = NULL) + ggtitle("Age group: adult") +  # Add a title at the top
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(hjust = 1),  # Right-align taxonomy labels
+        legend.position = "right",
+        legend.title = element_text(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), plot.title = element_text(hjust = 0.5, vjust = 1, size = 10)) # Title on top-right
+
+da_adults #OK
+
+```
+
+#### Figure 5B
+
+```{r}
+#Figure 5B - DA test data for children
+
+#Import DA test data for children
+childrendata <- read.delim("da/ancombc-children.txt")
+
+#Check the data
+#str(childrendata) #OK
+#View(childrendata)
+
+#Filter for significant genera based on the q-value ≤ 0.001
+significant_childrendata <- childrendata %>%
+filter(if_any(starts_with("qvalue"), ~ . <= 0.001))
+
+#Convert data to long format for ggplot
+df_long_children <- significant_childrendata %>%
+  pivot_longer(cols = starts_with("lfc"), names_to = "Treatment", values_to = "LFC") %>%
+  pivot_longer(cols = starts_with("qvalue"), names_to = "Qvalue", values_to = "Qval") %>%
+  filter(Qvalue == gsub("lfc", "qvalue", Treatment)) %>%  # Match q-values to corresponding LFCs
+  select(-Qvalue) %>%  
+  mutate(
+    Taxonomy = sub(".*f__", "", Taxonomy),  # Trim Taxonomy to include only Family and Genus names
+    Treatment = gsub("^lfc", "", Treatment),  # Remove "lfc" prefix
+    Treatment = gsub("\\.", "-", Treatment),  # Replace "." with "-"
+    Treatment = gsub("Glycerol-DSMO-PEG", "Glycerol-DMSO-PEG", Treatment)  # Fix a typo
+  ) %>%
+  mutate(LFC = ifelse(Qval > 0.001, NA, LFC))  # Mask non-significant values
+
+#Order Taxonomy alphabetically from top to bottom
+df_long_children$Taxonomy <- factor(df_long_children$Taxonomy, levels = rev(sort(unique(df_long_children$Taxonomy))))  
+
+#Create a BrBg-based color ramp
+heatmap_colors_BrBg <- colorRampPalette(c("#a6611a", "#dfc27d", "#80cdc1", "#018571"))(100)
+
+#Define color scale using the full palette
+heatmap_colors_children <- scale_fill_gradientn(colors = heatmap_colors_BrBg, na.value = "grey90", name = "LFC", breaks = seq(-3, 3, by = 1))
+
+#Plot DA test data for children
+da_children <- ggplot(df_long_children, aes(x = Treatment, y = Taxonomy, fill = LFC)) +
+  geom_tile(color = "white") +  # Add grid with white borders
+  heatmap_colors_children +  # Use LFC color scale 
+  theme_minimal() + labs(x = NULL, y = NULL) + ggtitle("Age group: child") +  # Add a title at the top
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(hjust = 1),  # Right-align taxonomy labels
+        legend.position = "right",
+        legend.title = element_text(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), plot.title = element_text(hjust = 0.5, vjust = 1, size = 10)) # Title on top-right
+
+da_children #OK
+
+```
+
+#### Figure 5C
+
+```{r}
+#Figure 5C - DA test data for infants
+
+#Import DA test data for infants
+infantdata <- read.delim("da/ancombc-infants.txt")
+
+#Check the data
+#str(infantdata) #OK
+#View(infantdata)
+
+#Filter for significant genera based on the q-value ≤ 0.001
+significant_infantdata <- infantdata %>%
+filter(if_any(starts_with("qvalue"), ~ . <= 0.001))
+
+#Convert data to long format for ggplot
+df_long_infants <- significant_infantdata %>%
+  pivot_longer(cols = starts_with("lfc"), names_to = "Treatment", values_to = "LFC") %>%
+  pivot_longer(cols = starts_with("qvalue"), names_to = "Qvalue", values_to = "Qval") %>%
+  filter(Qvalue == gsub("lfc", "qvalue", Treatment)) %>%  # Match q-values to corresponding LFCs
+  select(-Qvalue) %>%  
+  mutate(
+    Taxonomy = sub(".*f__", "", Taxonomy),  # Trim Taxonomy to include only Family and Genus names
+    Treatment = gsub("^lfc", "", Treatment),  # Remove "lfc" prefix
+    Treatment = gsub("\\.", "-", Treatment),  # Replace "." with "-"
+    Treatment = gsub("Glycerol-DSMO-PEG", "Glycerol-DMSO-PEG", Treatment)  # Fix a typo
+  ) %>%
+  mutate(LFC = ifelse(Qval > 0.001, NA, LFC))  # Mask non-significant values
+
+#Order Taxonomy alphabetically from top to bottom
+df_long_infants$Taxonomy <- factor(df_long_infants$Taxonomy, levels = rev(sort(unique(df_long_infants$Taxonomy))))  
+
+#Create a BrBg-based color ramp
+heatmap_colors_BrBg <- colorRampPalette(c("#a6611a", "#dfc27d", "#80cdc1", "#018571"))(100)
+
+#Define color scale using the full palette
+heatmap_colors_infants <- scale_fill_gradientn(colors = heatmap_colors_BrBg, na.value = "grey90", name = "LFC", breaks = seq(-3, 3, by = 1))
+
+#Plot DA test data for infants
+da_infants <- ggplot(df_long_infants, aes(x = Treatment, y = Taxonomy, fill = LFC)) +
+  geom_tile(color = "white") +  # Add grid with white borders
+  heatmap_colors_infants +  # Use LFC color scale 
+  theme_minimal() + labs(x = NULL, y = NULL) + ggtitle("Age group: infant") +  # Add a title at the top
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(hjust = 1),  # Right-align taxonomy labels
+        legend.position = "right",
+        legend.title = element_text(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), plot.title = element_text(hjust = 0.5, vjust = 1, size = 10)) # Title on top-right
+
+da_infants #OK
+
+```
+
+#### Merge Figure 5
+
+```{r}
+#Merge Figure 5 A-C panels
+
+merged_da <- ggarrange(da_adults, da_children, da_infants, 
+                    common.legend = TRUE, legend = "right",
+                    labels = c("A", "B", "C"),
+                    ncol = 1, nrow = 3, align="v"+ theme_void())
+
+merged_da #OK
+
+#Save as a PDF
+#ggsave("plots/Figure5.pdf", plot=merged_da, width=7, height=11) #OK
+
+```
+
+## Supplementary Figures
+
+#### Supplementary Figure S1
+
+#### (A) Observed ASVs, (B) Faith PD, and (C) Shannon entropy across sample cryopreservation treatments by host age
+
+#### Supplementary Figure S1A
+
+```{r}
+#Supplementary Figure S1A
+
+#Plot observed ASVs across sample cryopreservation treatments and group data according to host age
+p_obsASVs_cryo_age <- ggboxplot(observed_ags_df,
+          x = "Preservation",
+          y = "observed_features",
+          fill = "Preservation",
+          palette = my_colors,
+          add = "jitter",
+          add.params = list(alpha = 0.4, size = 1.5, shape = "SampleDelivery"),
+          outlier.shape = NA) + scale_shape_manual(values = c(1, 16)) +
+  geom_vline(xintercept = 1.5, linetype = "dashed", color = "gray30", size = 0.5) +  # Add dashed line
+  facet_wrap(~ HostAgeGroup, nrow = 1) +  # Facet by host age
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none", legend.title = element_blank()) + labs(x = NULL, y = "Observed ASVs")
+
+print(p_obsASVs_cryo_age) #OK
+
+```
+
+#### Supplementary Figure S1B
+
+```{r}
+#Supplementary Figure S1B
+
+#Prep the data following the same procedure as described above
+
+#Convert to factor (if not already)
+faithPD_ags_df$`Preservation` <- factor(faithPD_ags_df$`Preservation`,
+levels = c("Fresh", "Direct-Plating", "DMSO-Trehalose-TSB", "Glycerol", "Glycerol-Cysteine-Palladium", "Glycerol-DSMO-PEG", "Glycerol-PalladiumBeads", "PalladiumBeads", "Snap-freezing", "Sucrose"))
+
+#Fix a typo in the cryopreservation treatment level name before plotting
+levels(faithPD_ags_df$`Preservation`)[levels(faithPD_ags_df$`Preservation`) == "Glycerol-DSMO-PEG"] <- "Glycerol-DMSO-PEG"
+#levels(faithPD_ags_df$`Preservation`)
+
+#Reorder so that samples sequenced and plated fresh are displayed first
+faithPD_ags_df$`Preservation` <- factor(faithPD_ags_df$`Preservation`,
+levels = c("Fresh", "Direct-Plating", "DMSO-Trehalose-TSB", "Glycerol", "Glycerol-Cysteine-Palladium", "Glycerol-DMSO-PEG", "Glycerol-PalladiumBeads", "PalladiumBeads", "Snap-freezing", "Sucrose"))
+
+#Convert to factor (if not already)
+faithPD_ags_df$SampleDelivery <- factor(faithPD_ags_df$SampleDelivery)
+
+#Convert to numeric (if not already)
+faithPD_ags_df$`faith_pd` <- as.numeric(faithPD_ags_df$`faith_pd`)
+
+#Assign colors
+extended_palette <- colorRampPalette(wes_palette("AsteroidCity3"))
+my_colors1 <- extended_palette(length(levels(faithPD_ags_df$`Preservation`)))
+
+
+#Plot faith PD across sample cryopreservation treatments and group data according to host age
+p_faith_pd_cryo_age <- ggboxplot(faithPD_ags_df,
+          x = "Preservation",
+          y = "faith_pd",
+          fill = "Preservation",
+          palette = my_colors1,
+          add = "jitter",
+          add.params = list(alpha = 0.4, size = 1.5, shape = "SampleDelivery"),
+          outlier.shape = NA) + scale_shape_manual(values = c(1, 16)) +
+  geom_vline(xintercept = 1.5, linetype = "dashed", color = "gray30", size = 0.5) +  # Add dashed line
+  facet_wrap(~ HostAgeGroup, nrow = 1) +  # Facet by host age
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none", legend.title = element_blank()) + labs(x = NULL, y = "Faith PD")
+
+print(p_faith_pd_cryo_age) #OK
+
+```
+
+#### Supplementary Figure S1C
+
+```{r}
+#Supplementary Figure S1C
+
+#Prep the data following the same procedure as described above
+
+#Convert to factor (if not already)
+shannon_ags_df$`Preservation` <- factor(shannon_ags_df$`Preservation`,
+levels = c("Fresh", "Direct-Plating", "DMSO-Trehalose-TSB", "Glycerol", "Glycerol-Cysteine-Palladium", "Glycerol-DSMO-PEG", "Glycerol-PalladiumBeads", "PalladiumBeads", "Snap-freezing", "Sucrose"))
+
+#Fix a typo in the cryopreservation treatment level name before plotting
+levels(shannon_ags_df$`Preservation`)[levels(shannon_ags_df$`Preservation`) == "Glycerol-DSMO-PEG"] <- "Glycerol-DMSO-PEG"
+#levels(shannon_ags_df$`Preservation`)
+
+#Reorder so that samples sequenced and plated fresh are displayed first
+shannon_ags_df$`Preservation` <- factor(shannon_ags_df$`Preservation`,
+levels = c("Fresh", "Direct-Plating", "DMSO-Trehalose-TSB", "Glycerol", "Glycerol-Cysteine-Palladium", "Glycerol-DMSO-PEG", "Glycerol-PalladiumBeads", "PalladiumBeads", "Snap-freezing", "Sucrose"))
+
+#Convert to factor (if not already)
+shannon_ags_df$SampleDelivery <- factor(shannon_ags_df$SampleDelivery)
+
+#Convert to numeric (if not already)
+shannon_ags_df$`shannon_entropy` <- as.numeric(shannon_ags_df$`shannon_entropy`)
+
+#Assign colors
+extended_palette <- colorRampPalette(wes_palette("AsteroidCity3"))
+my_colors2 <- extended_palette(length(levels(shannon_ags_df$`Preservation`)))
+
+
+#Plot shannon entropy across sample cryopreservation treatments and group data according to host age
+p_shannon_entropy_cryo_age <- ggboxplot(shannon_ags_df,
+          x = "Preservation",
+          y = "shannon_entropy",
+          fill = "Preservation",
+          palette = my_colors2,
+          add = "jitter",
+          add.params = list(alpha = 0.4, size = 1.5, shape = "SampleDelivery"),
+          outlier.shape = NA) + scale_shape_manual(values = c(1, 16)) +
+  geom_vline(xintercept = 1.5, linetype = "dashed", color = "gray30", size = 0.5) +  # Add dashed line
+  facet_wrap(~ HostAgeGroup, nrow = 1) +  # Facet by host age
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none", legend.title = element_blank()) + labs(x = "Cryopreservation groups", y = "Shannon entropy")
+
+print(p_shannon_entropy_cryo_age) #OK
+
+```
+
+#### Merge Figure S1
+
+```{r}
+#Merge Figure S1 A-C panels
+merged_cryo_age <- ggarrange(p_obsASVs_cryo_age, p_faith_pd_cryo_age, p_shannon_entropy_cryo_age, 
+                    common.legend = FALSE,
+                    labels = c("A", "B", "C"),
+                    ncol = 1, nrow = 3, align="v"+ theme_void())
+
+merged_cryo_age #OK
+
+#Save as a PDF
+#ggsave("plots/FigureS1.pdf", plot=merged_cryo_age, width=8, height=9) #OK
+
+```
+
+#### Supplementary Figure S2
+
+#### (A) Observed ASVs, (B) Faith PD, and (C) Shannon entropy by sample state grouped according to host age
+
+#### Supplementary Figure S2A
+
+```{r}
+#Supplementary Figure S2A
+
+#Convert to factor (if not already)
+observed_ags_df$State <- factor(observed_ags_df$State)
+
+#Rename sample state level name before plotting
+levels(observed_ags_df$State)[levels(observed_ags_df$State) == "Pooled"] <- "Cultured"
+#levels(observed_ags_df$State)
+
+#Reorder so that samples sequenced fresh are displayed first
+observed_ags_df$State <- factor(observed_ags_df$State,
+                                       levels = c("Fresh", "Cultured"))
+
+#Plot observed ASVs by sample state grouped according to host age
+p_obsASVs_state_age <- ggboxplot(observed_ags_df,
+          x = "State",
+          y = "observed_features",
+          fill = "lightgray",
+          add = "jitter",
+          add.params = list(alpha = 0.4, size = 1.5, shape = "SampleDelivery"),
+          outlier.shape = NA) + scale_shape_manual(values = c(1, 16)) +
+  facet_wrap(~ HostAgeGroup, nrow = 1) + # Facet by host age
+  theme_bw() +
+  theme(axis.text.x = element_text(),
+    legend.position = "none", legend.title = element_blank()) + labs(x = NULL, y = "Observed ASVs")
+
+print(p_obsASVs_state_age) #OK
+
+```
+
+#### Supplementary Figure S2B
+
+```{r}
+#Supplementary Figure S2B
+
+#Convert to factor (if not already)
+faithPD_ags_df$State <- factor(faithPD_ags_df$State)
+
+#Rename sample state level name before plotting
+levels(faithPD_ags_df$State)[levels(faithPD_ags_df$State) == "Pooled"] <- "Cultured"
+#levels(faithPD_ags_df$State)
+
+#Reorder so that samples sequenced fresh are displayed first
+faithPD_ags_df$State <- factor(faithPD_ags_df$State,
+                                       levels = c("Fresh", "Cultured"))
+
+#Plot faith PD by sample state grouped according to host age
+p_faith_pd_state_age <- ggboxplot(faithPD_ags_df,
+          x = "State",
+          y = "faith_pd",
+          fill = "lightgray",
+          add = "jitter",
+          add.params = list(alpha = 0.4, size = 1.5, shape = "SampleDelivery"),
+          outlier.shape = NA) + scale_shape_manual(values = c(1, 16)) +
+  facet_wrap(~ HostAgeGroup, nrow = 1) + # Facet by host age
+  theme_bw() +
+  theme(axis.text.x = element_text(),
+    legend.position = "none", legend.title = element_blank()) + labs(x = NULL, y = "Faith PD")
+
+print(p_faith_pd_state_age) #OK
+
+```
+
+#### Supplementary Figure S2C
+
+```{r}
+#Supplementary Figure S2C
+
+#Convert to factor (if not already)
+shannon_ags_df$State <- factor(shannon_ags_df$State)
+
+#Rename sample state level name before plotting
+levels(shannon_ags_df$State)[levels(shannon_ags_df$State) == "Pooled"] <- "Cultured"
+#levels(shannon_ags_df$State)
+
+#Reorder so that samples sequenced fresh are displayed first
+shannon_ags_df$State <- factor(shannon_ags_df$State,
+                                       levels = c("Fresh", "Cultured"))
+
+#Plot shannon entropy by sample state grouped according to host age
+p_shannon_entropy_state_age <- ggboxplot(shannon_ags_df,
+          x = "State",
+          y = "shannon_entropy",
+          fill = "lightgray",
+          add = "jitter",
+          add.params = list(alpha = 0.4, size = 1.5, shape = "SampleDelivery"),
+          outlier.shape = NA) + scale_shape_manual(values = c(1, 16)) +
+  facet_wrap(~ HostAgeGroup, nrow = 1) + # Facet by host age
+  theme_bw() +
+  theme(axis.text.x = element_text(),
+    legend.position = "none", legend.title = element_blank()) + labs(x = "Sample state", y = "Shannon entropy")
+
+print(p_shannon_entropy_state_age) #OK
+
+```
+
+#### Merge Figure S2
+
+```{r}
+#Merge Figure S2 A-C panels
+merged_state_age <- ggarrange(p_obsASVs_state_age, p_faith_pd_state_age, p_shannon_entropy_state_age, 
+                    common.legend = FALSE,
+                    labels = c("A", "B", "C"),
+                    ncol = 1, nrow = 3, align="v"+ theme_void())
+
+merged_state_age #OK
+
+#Save as a PDF
+#ggsave("plots/FigureS2.pdf", plot=merged_state_age, width=5, height=7) #OK
+
+```
+
+#### Supplementary Figure S3
+
+#### (A) Observed ASVs, (B) Faith PD, and (C) Shannon entropy by sample delivery grouped according to sample state
+
+#### Supplementary Figure S3A
+
+```{r}
+#Supplementary Figure S3A
+
+#Plot observed ASVs by sample delivery grouped according to sample state
+p_obsASVs_delivery_state <- ggboxplot(observed_ags_df,
+          x = "SampleDelivery",
+          y = "observed_features",
+          fill = "lightgray",
+          add = "jitter",
+          add.params = list(alpha = 0.4, size = 1.5, shape = "HostAgeGroup"),
+          outlier.shape = NA) + scale_shape_manual(values = c(15, 16, 17)) +
+  facet_wrap(~ State, nrow = 1) + # Facet by sample state
+  theme_bw() +
+  theme(axis.text.x = element_text(),
+    legend.position = "right", legend.title = element_blank()) + labs(x = NULL, y = "Observed ASVs")
+
+print(p_obsASVs_delivery_state) #OK
+
+```
+
+#### Supplementary Figure S3B
+
+```{r}
+#Supplementary Figure S3B
+
+#Plot faith PD by sample delivery grouped according to sample state
+p_faith_pd_delivery_state <- ggboxplot(faithPD_ags_df,
+          x = "SampleDelivery",
+          y = "faith_pd",
+          fill = "lightgray",
+          add = "jitter",
+          add.params = list(alpha = 0.4, size = 1.5, shape = "HostAgeGroup"),
+          outlier.shape = NA) + scale_shape_manual(values = c(15, 16, 17)) +
+  facet_wrap(~ State, nrow = 1) + # Facet by sample state
+  theme_bw() +
+  theme(axis.text.x = element_text(),
+    legend.position = "right", legend.title = element_blank()) + labs(x = NULL, y = "Faith PD")
+
+print(p_faith_pd_delivery_state) #OK
+
+```
+
+#### Supplementary Figure S3C
+
+```{r}
+#Supplementary Figure S3C
+
+#Plot shannon entropy by sample delivery grouped according to sample state
+p_shannon_entropy_delivery_state <- ggboxplot(shannon_ags_df,
+          x = "SampleDelivery",
+          y = "shannon_entropy",
+          fill = "lightgray",
+          add = "jitter",
+          add.params = list(alpha = 0.4, size = 1.5, shape = "HostAgeGroup"),
+          outlier.shape = NA) + scale_shape_manual(values = c(15, 16, 17)) +
+  facet_wrap(~ State, nrow = 1) + # Facet by sample state
+  theme_bw() +
+  theme(axis.text.x = element_text(),
+    legend.position = "right", legend.title = element_blank()) + labs(x = "Sample delivery", y = "Shannon entropy")
+
+print(p_shannon_entropy_delivery_state) #OK
+
+```
+
+#### Merge Figure S3
+
+```{r}
+#Merge Figure S3 A-C panels
+merged_delivery_state <- ggarrange(p_obsASVs_delivery_state, p_faith_pd_delivery_state, p_shannon_entropy_delivery_state, 
+                    common.legend = TRUE, legend = "right",
+                    labels = c("A", "B", "C"),
+                    ncol = 1, nrow = 3, align="v"+ theme_void())
+
+merged_delivery_state #OK
+
+#Save as a PDF
+#ggsave("plots/FigureS3.pdf", plot=merged_delivery_state, width=5, height=7) #OK
+
+```
+
+#### Compile session info for reproducibility
+
+```{r}
+
+#Print session info
+session_info()$platform
+
+```
+```{r}
+#Extract loaded packages and versions
+loaded_packages <- sessionInfo()$otherPkgs
+
+cat("Loaded Packages:\n")
+for (pkg in names(loaded_packages)) {cat("-", pkg, ":", loaded_packages[[pkg]]$Version, "\n")}
+
+```
