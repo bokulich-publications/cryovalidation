@@ -6,7 +6,7 @@ Evaluating long-term stool preservation methods for maximizing the recovery of v
 
 ## Requirements
 
-QIIME 2 is required to run most of the commands described in the Jupyter Notebook. To install the latest version of QIIME 2 refer to [these](https://library.qiime2.org/quickstart/amplicon) instructions. For detailed session information and the list of required R packages for data processing and plotting in R are provided within the accompanying R session info file.
+QIIME 2 is required to run most of the commands described in the Jupyter Notebook. To install the latest version of QIIME 2 refer to [these](https://library.qiime2.org/quickstart/amplicon) instructions. For detailed session information and the list of required R packages for data processing and plotting in R refer to the accompanying R session info file.
 
 ### File explanations
 
