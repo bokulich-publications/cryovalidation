@@ -1,8 +1,8 @@
 # Analysis notebooks
 
-This repository contains code used to analyse the data in Teo, Lavrinienko et al. 2025:
+This repository contains code used to analyse the data in Teo, Lavrinienko et al. 2025 paper:
 
-Evaluating long-term stool preservation methods for maximizing the recovery of viable human fecal microbiota
+[Evaluating long-term stool preservation methods for maximizing the recovery of viable human fecal microbiota](https://doi.org/10.1080/29933935.2025.2594958)
 
 ## Requirements
 
